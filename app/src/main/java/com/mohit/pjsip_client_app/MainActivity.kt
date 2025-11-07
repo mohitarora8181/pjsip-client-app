@@ -1,7 +1,6 @@
 package com.mohit.pjsip_client_app
 
 import android.os.Bundle
-import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -15,6 +14,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -23,7 +23,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -31,8 +30,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.app.ActivityCompat
-import com.mizuvoip.jvoip.SIPNotification
-import com.mizuvoip.jvoip.SIPNotificationListener
 import com.mohit.pjsip_client_app.ui.theme.PjSip_client_appTheme
 import kotlinx.coroutines.delay
 
@@ -74,6 +71,7 @@ fun SIPVoIPUI(modifier: Modifier = Modifier) {
     var destination by remember { mutableStateOf("") }
     val context = LocalContext.current
     var callDuration by remember { mutableStateOf(0) }
+    var showDialpad by remember { mutableStateOf(false) }
 
     // Listen for incoming calls
     IncomingCallListener()
@@ -95,6 +93,7 @@ fun SIPVoIPUI(modifier: Modifier = Modifier) {
     LaunchedEffect(isInCall) {
         if (!isInCall) {
             callDuration = 0
+            showDialpad = false
         }
     }
 
@@ -163,11 +162,23 @@ fun SIPVoIPUI(modifier: Modifier = Modifier) {
                             duration = callDuration,
                             isOnHold = isOnHold
                         )
-                        Spacer(modifier = Modifier.height(24.dp))
+                        Spacer(modifier = Modifier.height(16.dp))
                     }
 
-                    // Dial Pad (only when not in call)
-                    if (!isInCall) {
+                    // In-Call Dialpad or Pre-Call Dialpad
+                    if (isInCall) {
+                        if (showDialpad) {
+                            InCallDialPad(
+                                onDigitClick = { digit ->
+                                    SipManager.sendDTMF(digit)
+                                    Toast.makeText(context, "Sent: $digit", Toast.LENGTH_SHORT).show()
+                                },
+                                onClose = { showDialpad = false }
+                            )
+                        } else {
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
+                    } else {
                         DialPad(
                             onDigitClick = { digit -> destination += digit },
                             onDeleteClick = {
@@ -181,7 +192,6 @@ fun SIPVoIPUI(modifier: Modifier = Modifier) {
 
                     // Call Controls
                     if (isInCall) {
-                        // Force recomposition when states change
                         val currentMuteState by remember { derivedStateOf { SipManager.isMuted } }
                         val currentSpeakerState by remember { derivedStateOf { SipManager.isSpeakerOn } }
 
@@ -189,6 +199,7 @@ fun SIPVoIPUI(modifier: Modifier = Modifier) {
                             isMuted = currentMuteState,
                             isSpeakerOn = currentSpeakerState,
                             isOnHold = isOnHold,
+                            showDialpad = showDialpad,
                             onMuteToggle = {
                                 SipManager.toggleMute()
                                 Toast.makeText(context,
@@ -208,6 +219,7 @@ fun SIPVoIPUI(modifier: Modifier = Modifier) {
                                     SipManager.holdCall()
                                 }
                             },
+                            onDialpadToggle = { showDialpad = !showDialpad },
                             onHangup = { SipManager.hangUp() }
                         )
                     } else {
@@ -279,54 +291,47 @@ fun DisplayArea(
     onDestinationChange: (String) -> Unit,
     isInCall: Boolean
 ) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(100.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = Color.White.copy(alpha = 0.05f)
-        ),
-        shape = RoundedCornerShape(20.dp)
-    ) {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
+    if (!isInCall) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(100.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = Color.White.copy(alpha = 0.05f)
+            ),
+            shape = RoundedCornerShape(20.dp)
         ) {
-            if (isInCall) {
-                Text(
-                    text = destination,
-                    color = Color.White,
-                    fontSize = 32.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            } else {
-                OutlinedTextField(
-                    value = destination,
-                    onValueChange = onDestinationChange,
-                    placeholder = {
-                        Text(
-                            "Enter number",
-                            color = Color.White.copy(alpha = 0.4f),
-                            fontSize = 24.sp
-                        )
-                    },
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White,
-                        focusedBorderColor = Color.Transparent,
-                        unfocusedBorderColor = Color.Transparent
-                    ),
-                    textStyle = LocalTextStyle.current.copy(
-                        fontSize = 28.sp,
-                        textAlign = TextAlign.Center,
-                        fontWeight = FontWeight.Medium
-                    ),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                    OutlinedTextField(
+                        value = destination,
+                        onValueChange = onDestinationChange,
+                        placeholder = {
+                            Text(
+                                "Enter number",
+                                color = Color.White.copy(alpha = 0.4f),
+                                fontSize = 24.sp
+                            )
+                        },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            focusedBorderColor = Color.Transparent,
+                            unfocusedBorderColor = Color.Transparent
+                        ),
+                        textStyle = LocalTextStyle.current.copy(
+                            fontSize = 28.sp,
+                            textAlign = TextAlign.Center,
+                            fontWeight = FontWeight.Medium
+                        ),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                }
             }
-        }
     }
 }
 
@@ -401,135 +406,253 @@ fun DialPad(onDigitClick: (String) -> Unit, onDeleteClick: () -> Unit) {
 }
 
 @Composable
+fun InCallDialPad(
+    onDigitClick: (String) -> Unit,
+    onClose: () -> Unit
+) {
+    val dialpadValue = remember { mutableStateOf("") }
+    val digits = listOf(
+        listOf("1" to "", "2" to "ABC", "3" to "DEF"),
+        listOf("4" to "GHI", "5" to "JKL", "6" to "MNO"),
+        listOf("7" to "PQRS", "8" to "TUV", "9" to "WXYZ"),
+        listOf("*" to "", "0" to "+", "#" to "")
+    )
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = Color.White.copy(alpha = 0.08f)
+        ),
+        shape = RoundedCornerShape(20.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            // Header with close button
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = dialpadValue.value,
+                    color = Color.White.copy(alpha = 0.8f),
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Medium
+                )
+                IconButton(
+                    onClick = onClose,
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        Icons.Filled.Close,
+                        contentDescription = "Close",
+                        tint = Color.White.copy(alpha = 0.7f)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Dialpad buttons
+            digits.forEach { row ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    row.forEach { (digit, letters) ->
+                        Button(
+                            onClick = {
+                                dialpadValue.value += digit
+                                onDigitClick(digit)
+                            },
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(65.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color.White.copy(alpha = 0.12f)
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                Text(
+                                    text = digit,
+                                    color = Color.White,
+                                    fontSize = 26.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                if (letters.isNotEmpty()) {
+                                    Text(
+                                        text = letters,
+                                        color = Color.White.copy(alpha = 0.5f),
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Normal
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 fun InCallControls(
     isMuted: Boolean,
     isSpeakerOn: Boolean,
     isOnHold: Boolean,
+    showDialpad: Boolean,
     onMuteToggle: () -> Unit,
     onSpeakerToggle: () -> Unit,
     onHoldToggle: () -> Unit,
+    onDialpadToggle: () -> Unit,
     onHangup: () -> Unit
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            // Mute Button
+        // First row: Mute, Hold, Speaker
+        if(!showDialpad){
             Card(
                 modifier = Modifier
-                    .weight(1f)
-                    .height(100.dp),
+                    .fillMaxWidth()
+                    .height(60.dp),
                 colors = CardDefaults.cardColors(
-                    containerColor = if (isMuted)
-                        Color.White.copy(alpha = 0.2f)
+                    containerColor = if (showDialpad)
+                        Color(0xFF4CAF50).copy(alpha = 0.3f)
                     else
                         Color.White.copy(alpha = 0.1f)
                 ),
                 shape = RoundedCornerShape(16.dp),
-                onClick = onMuteToggle
+                onClick = onDialpadToggle
             ) {
-                Column(
+                Row(
                     modifier = Modifier.fillMaxSize(),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "🎤",
-                        fontSize = 32.sp,
-                        color = if (isMuted) Color.Red else Color.White
+                    Icon(
+                        Icons.Filled.Menu,
+                        contentDescription = "Dialpad",
+                        tint = Color.White,
+                        modifier = Modifier.size(24.dp)
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    if (isMuted) {
-                        Text(
-                            text = "❌",
-                            fontSize = 16.sp,
-                            color = Color.Red
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = if (isMuted) "Unmute" else "Mute",
-                        color = Color.White.copy(alpha = 0.8f),
-                        fontSize = 12.sp
+                        text = "Show Keypad",
+                        color = Color.White,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Medium
                     )
                 }
             }
-
-            // Hold Button
-            Card(
-                modifier = Modifier
-                    .weight(1f)
-                    .height(100.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = if (isOnHold)
-                        Color.White.copy(alpha = 0.2f)
-                    else
-                        Color.White.copy(alpha = 0.1f)
-                ),
-                shape = RoundedCornerShape(16.dp),
-                onClick = onHoldToggle
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Column(
-                    modifier = Modifier.fillMaxSize(),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
+                // Mute Button
+                Card(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(90.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isMuted)
+                            Color(0xFFF44336).copy(alpha = 0.3f)
+                        else
+                            Color.White.copy(alpha = 0.1f)
+                    ),
+                    shape = RoundedCornerShape(16.dp),
+                    onClick = onMuteToggle
                 ) {
-                    Text(
-                        text = if (isOnHold) "▶️" else "⏸️",
-                        fontSize = 32.sp,
-                        color = if (isOnHold) Color(0xFFFFC107) else Color.White
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = if (isOnHold) "Resume" else "Hold",
-                        color = Color.White.copy(alpha = 0.8f),
-                        fontSize = 12.sp
-                    )
-                }
-            }
-
-            // Speaker Button
-            Card(
-                modifier = Modifier
-                    .weight(1f)
-                    .height(100.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = if (isSpeakerOn)
-                        Color.White.copy(alpha = 0.2f)
-                    else
-                        Color.White.copy(alpha = 0.1f)
-                ),
-                shape = RoundedCornerShape(16.dp),
-                onClick = onSpeakerToggle
-            ) {
-                Column(
-                    modifier = Modifier.fillMaxSize(),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    Text(
-                        text = "🔊",
-                        fontSize = 32.sp,
-                        color = if (isSpeakerOn) Color(0xFF2196F3) else Color.White
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    if (isSpeakerOn) {
+                    Column(
+                        modifier = Modifier.fillMaxSize(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
                         Text(
-                            text = "❌",
-                            fontSize = 16.sp,
-                            color = Color.Gray
+                            text = if (isMuted) "🔇" else "🎤",
+                            fontSize = 30.sp
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = if (isMuted) "Unmute" else "Mute",
+                            color = Color.White.copy(alpha = 0.8f),
+                            fontSize = 12.sp
                         )
                     }
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = if (!isSpeakerOn) "Speaker On" else "Speaker Off",
-                        color = Color.White.copy(alpha = 0.8f),
-                        fontSize = 12.sp
-                    )
+                }
+
+                // Hold Button
+                Card(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(90.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isOnHold)
+                            Color(0xFFFFC107).copy(alpha = 0.3f)
+                        else
+                            Color.White.copy(alpha = 0.1f)
+                    ),
+                    shape = RoundedCornerShape(16.dp),
+                    onClick = onHoldToggle
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxSize(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = if (isOnHold) "▶️" else "⏸️",
+                            fontSize = 30.sp
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = if (isOnHold) "Resume" else "Hold",
+                            color = Color.White.copy(alpha = 0.8f),
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+
+                // Speaker Button
+                Card(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(90.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isSpeakerOn)
+                            Color(0xFF2196F3).copy(alpha = 0.3f)
+                        else
+                            Color.White.copy(alpha = 0.1f)
+                    ),
+                    shape = RoundedCornerShape(16.dp),
+                    onClick = onSpeakerToggle
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxSize(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = if (isSpeakerOn) "🔊" else "🔉",
+                            fontSize = 30.sp
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = if (isSpeakerOn) "Speaker" else "Earpiece",
+                            color = Color.White.copy(alpha = 0.8f),
+                            fontSize = 12.sp
+                        )
+                    }
                 }
             }
         }
@@ -551,46 +674,6 @@ fun InCallControls(
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text("End Call", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-        }
-    }
-}
-
-@Composable
-fun ControlButton(
-    icon: ImageVector,
-    label: String,
-    isActive: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        modifier = modifier.height(100.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isActive)
-                Color.White.copy(alpha = 0.2f)
-            else
-                Color.White.copy(alpha = 0.1f)
-        ),
-        shape = RoundedCornerShape(16.dp),
-        onClick = onClick
-    ) {
-        Column(
-            modifier = Modifier.fillMaxSize(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = label,
-                tint = if (isActive) Color(0xFF2196F3) else Color.White,
-                modifier = Modifier.size(32.dp)
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = label,
-                color = Color.White.copy(alpha = 0.8f),
-                fontSize = 12.sp
-            )
         }
     }
 }
@@ -735,7 +818,6 @@ fun IncomingCallListener() {
     }
 }
 
-// Helper function to format call duration
 fun formatDuration(seconds: Int): String {
     val mins = seconds / 60
     val secs = seconds % 60

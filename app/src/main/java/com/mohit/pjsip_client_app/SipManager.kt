@@ -121,6 +121,11 @@ object SipManager {
         callStatus = "Call on Release"
         Log.d("SIP", "Call on Release")
     }
+
+    fun sendDTMF(digit: String) {
+        sipStack?.Dtmf(-1, digit)
+        Log.d("SIP", "Sent DTMF: $digit")
+    }
 }
 
 
